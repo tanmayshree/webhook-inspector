@@ -197,21 +197,24 @@ const getLocation = async (ip) => {
   return null;
 };
 
-const filterHeaders = (headers) => {
+const filterHeaders = (rawHeaders) => {
   const filtered = {};
   const ignorePrefixes = ["x-vercel-", "x-forwarded-", "x-real-"];
   const ignoreExact = ["forwarded", "via", "connect-install-id", "purpose"];
 
-  Object.keys(headers).forEach((key) => {
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    const key = rawHeaders[i];
+    const value = rawHeaders[i + 1];
     const lowKey = key.toLowerCase();
+
     const shouldIgnore =
       ignorePrefixes.some((prefix) => lowKey.startsWith(prefix)) ||
       ignoreExact.includes(lowKey);
 
     if (!shouldIgnore) {
-      filtered[key] = headers[key];
+      filtered[key] = value;
     }
-  });
+  }
   return filtered;
 };
 
@@ -275,7 +278,7 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
       method: req.method,
       path: path,
       url: req.originalUrl,
-      headers: filterHeaders(req.headers),
+      headers: filterHeaders(req.rawHeaders),
       query: req.query,
       body: req.body,
       rawBody: req.rawBody || "",
