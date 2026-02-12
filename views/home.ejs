@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webhook Inspector | Start</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body {
+      background-color: var(--bg-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .landing-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 2.5rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .landing-logo {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .landing-card h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .landing-card p {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+
+    .url-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .input-box {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      transition: all 0.2s;
+      background-color: var(--card-bg);
+      color: var(--text-primary);
+    }
+
+    .input-box:focus {
+      border-color: var(--primary-color);
+      background-color: var(--card-bg);
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    .start-btn {
+      width: 100%;
+      padding: 0.75rem;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.9rem;
+    }
+
+    .start-btn:hover {
+      background-color: var(--primary-hover, #4338ca);
+      transform: translateY(-1px);
+    }
+
+    .generate-link {
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .generate-link span {
+      color: var(--primary-color);
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .generate-link span:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="landing-card">
+    <div style="position: absolute; top: 1rem; right: 1rem;">
+      <button onclick="toggleTheme()" style="background: none; border: none; cursor: pointer; font-size: 1.25rem;"
+        title="Toggle Dark Mode">🌓</button>
+    </div>
+    <span class="landing-logo">📡</span>
+    <h1>Webhook Inspector</h1>
+    <p>Enter a unique name to create or view your custom webhook endpoint.</p>
+
+    <form onsubmit="handleVisit(event)">
+      <div class="url-input-group">
+        <input type="text" id="endpoint-id" class="input-box" placeholder="my-endpoint-name" required autocomplete="off"
+          autofocus>
+        <button type="submit" class="start-btn">Open Webhook Viewer</button>
+      </div>
+    </form>
+
+    <div class="generate-link">
+      Need a name? <span onclick="generateRandom()">Generate a random ID</span>
+    </div>
+  </div>
+
+  <script>
+    // Theme Logic
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+
+    function handleVisit(e) {
+      e.preventDefault();
+      const id = document.getElementById('endpoint-id').value.trim();
+      if (id) {
+        window.location.href = `/view/${id}`;
+      }
+    }
+
+    function generateRandom() {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      let randomId = '';
+      for (let i = 0; i < 16; i++) {
+        if (i > 0 && i % 4 === 0) randomId += '-';
+        randomId += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      document.getElementById('endpoint-id').value = randomId;
+      document.getElementById('endpoint-id').focus();
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webhook Inspector - <%= endpointId %>
+  </title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>">
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/relativeTime.js"></script>
+  <script>dayjs.extend(window.dayjs_plugin_relativeTime)</script>
+</head>
+
+<body>
+  <header>
+    <div class="logo">
+      <span>📡</span> Webhook Inspector
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <div class="endpoint-info" onclick="toggleTheme()" id="theme-toggle" title="Toggle Dark Mode">
+        <span id="theme-icon">🌙</span>
+      </div>
+      <div class="endpoint-info" onclick="copyEndpoint()" title="Copy URL">
+        <span id="copy-status" style="display: flex; align-items: center;">
+          <span
+            style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; margin-right: 0.25rem; opacity: 0.8;">Click
+            to Copy</span>
+          <span class="copy-icon">📋</span>
+        </span>
+        <span id="endpoint-url">...</span>
+      </div>
+      <div class="endpoint-info" onclick="openSettings()" title="Settings">
+        <span class="copy-icon">⚙️</span>
+        <span>Settings</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Endpoint Configuration</h2>
+        <span class="close" onclick="closeSettings()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="flex: 1;">
+            <label>Default Status Code</label>
+            <input type="number" id="resp-status" value="200" placeholder="e.g. 200">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label>Delay (ms)</label>
+            <input type="number" id="resp-delay" value="0" placeholder="e.g. 1000">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Content Type</label>
+          <select id="resp-content-type">
+            <option value="text/plain">text/plain</option>
+            <option value="application/json">application/json</option>
+            <option value="text/html">text/html</option>
+            <option value="application/xml">application/xml</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Response Body</label>
+          <textarea id="resp-body" rows="4"
+            style="font-family: monospace; font-size: 0.8rem;">Webhook Received</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span>Requests</span>
+        <button class="refresh-btn" onclick="fetchRequests(currentPage)" title="Refresh"><span
+            class="refresh-icon">↻</span></button>
+      </div>
+      <ul class="request-list" id="request-list">
+        <!-- Request items will be injected here -->
+      </ul>
+      <div class="pagination">
+        <button id="prev-btn" class="page-btn" onclick="changePage(-1)" disabled>&lt;</button>
+        <span id="page-info" style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">Page 1</span>
+        <button id="next-btn" class="page-btn" onclick="changePage(1)" disabled>&gt;</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-state-content">
+          <div class="waiting-animation">
+            <div class="pulse-ring"></div>
+            <div class="empty-icon">📡</div>
+          </div>
+          <h2>Waiting for your first request</h2>
+          <p>Send an HTTP request to your unique endpoint URL below to start inspecting traffic in real-time.</p>
+
+          <div class="onboarding-box">
+            <div class="onboarding-label">TRY THIS EXAMPLE</div>
+            <div class="code-wrapper">
+              <code id="endpoint-display">...</code>
+              <button class="copy-code-btn" onclick="copyExampleCurl()" title="Copy to clipboard">
+                <span style="font-size: 0.9rem;">📋</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="connection-status">
+            <span class="status-dot"></span>
+            Listening for events...
+          </div>
+        </div>
+      </div>
+
+      <div id="request-details" class="request-details" style="display: none;">
+        <!-- Details will be injected here -->
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const endpointId = "<%= endpointId %>";
+    const baseUrl = window.location.origin;
+    const endpointUrl = `${baseUrl}/${endpointId}`;
+    let currentPage = 1;
+    let totalPages = 1;
+    let selectedrequestId = null;
+    let requestsCache = [];
+
+    // Theme Logic
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+    }
+
+    function updateThemeIcon(theme) {
+      document.getElementById('theme-icon').innerText = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function toggleSection(header) {
+      const content = header.nextElementSibling;
+      header.classList.toggle('collapsed');
+      content.classList.toggle('collapsed');
+    }
+
+    function copyRequestAsCurl(btn, id) {
+      const req = requestsCache.find(r => r._id === id);
+      if (!req) return;
+
+      // Build precise URL including path and query params
+      let fullUrl = endpointUrl;
+      if (req.url) {
+        // Use the stored originalUrl if available (includes path + query)
+        fullUrl = baseUrl + req.url;
+      } else {
+        // Fallback for requests stored before the subpath/query fix
+        const queryParams = new URLSearchParams(req.query).toString();
+        if (queryParams) {
+          fullUrl += '?' + queryParams;
+        }
+      }
+
+      let curl = `curl -X ${req.method} "${fullUrl}"`;
+
+      // Add headers
+      for (const [key, value] of Object.entries(req.headers)) {
+        // Skip host usually
+        if (key.toLowerCase() === 'host') continue;
+        curl += ` \\\n  -H "${key}: ${value}"`;
+      }
+
+      // Add body if exists and not GET
+      if (req.method !== 'GET' && req.rawBody) {
+        // Escape single quotes in body for shell
+        const escapedBody = req.rawBody.replace(/'/g, "'\\''");
+        curl += ` \\\n  -d '${escapedBody}'`;
+      }
+
+      navigator.clipboard.writeText(curl);
+
+      // Feedback
+      const originalContent = btn.innerHTML;
+      btn.innerHTML = '<span style="font-size: 0.85rem;">✅</span><span style="font-size: 0.7rem; font-weight: 600;">Copied!</span>';
+      btn.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+      btn.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+
+      setTimeout(() => {
+        btn.innerHTML = originalContent;
+        btn.style.backgroundColor = '';
+        btn.style.borderColor = '';
+      }, 2000);
+    }
+
+    // Initialize
+    document.getElementById('endpoint-url').innerText = endpointUrl;
+    document.getElementById('endpoint-display').innerText = `curl -X POST ${endpointUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{"message": "Hello from Webhook!"}'`;
+
+    function copyExampleCurl() {
+      const text = document.getElementById('endpoint-display').innerText;
+      navigator.clipboard.writeText(text);
+      const btn = document.querySelector('.copy-code-btn');
+      btn.innerHTML = '<span style="font-size: 0.9rem;">✅</span>';
+      setTimeout(() => {
+        btn.innerHTML = '<span style="font-size: 0.9rem;">📋</span>';
+      }, 2000);
+    }
+
+    function copyEndpoint() {
+      navigator.clipboard.writeText(endpointUrl);
+      const btn = document.querySelector('.endpoint-info[title="Copy URL"]');
+      const statusEl = btn.querySelector('#copy-status');
+      const originalStatus = statusEl.innerHTML;
+
+      statusEl.innerHTML = `
+        <span style="font-size: 0.65rem; color: #10b981; text-transform: uppercase; font-weight: 700; margin-right: 0.25rem;">Copied!</span>
+        <span class="copy-icon">✅</span> 
+      `;
+      btn.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+      btn.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+
+      setTimeout(() => {
+        statusEl.innerHTML = originalStatus;
+        btn.style.backgroundColor = '';
+        btn.style.borderColor = '';
+      }, 2000);
+    }
+
+    async function fetchRequests(page = 1) {
+      const refreshBtn = document.querySelector('.refresh-btn');
+      if (refreshBtn) refreshBtn.classList.add('spinning');
+
+      try {
+        const response = await fetch(`/api/requests/${endpointId}?page=${page}&limit=10`);
+        const data = await response.json();
+
+        requestsCache = data.requests;
+        currentPage = data.currentPage;
+        totalPages = data.totalPages;
+
+        renderList(data.requests);
+        updatePagination();
+
+        // If we have items and nothing selected, select first
+        if (requestsCache.length > 0 && !selectedrequestId) {
+          selectRequest(requestsCache[0]._id);
+        } else if (requestsCache.length === 0) {
+          document.getElementById('empty-state').style.display = 'flex';
+          document.getElementById('request-details').style.display = 'none';
+        } else if (requestsCache.length > 0 && selectedrequestId) {
+          // Re-select if still on page
+          const stillHere = requestsCache.find(r => r._id === selectedrequestId);
+          if (stillHere) renderDetails(stillHere);
+        }
+
+      } catch (error) {
+        console.error('Error fetching requests:', error);
+      } finally {
+        setTimeout(() => {
+          if (refreshBtn) refreshBtn.classList.remove('spinning');
+        }, 800); // Wait for the 0.8s animation to finish
+      }
+    }
+
+    function renderList(requests) {
+      const listEl = document.getElementById('request-list');
+      listEl.innerHTML = '';
+
+      requests.forEach(req => {
+        const li = document.createElement('li');
+        li.className = `request-item ${selectedrequestId === req._id ? 'active' : ''}`;
+        li.onclick = () => selectRequest(req._id);
+
+        const time = dayjs(req.createdAt).fromNow();
+        const methodClass = `method-${req.method}`;
+
+        li.innerHTML = `
+          <div class="req-meta" style="align-items: flex-start;">
+            <span class="${methodClass} req-method">${req.method}</span>
+            <div style="text-align: right; display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 600; font-size: 0.7rem; color: var(--text-primary);">${time}</span>
+              <span style="font-size: 0.6rem; color: var(--text-secondary); white-space: nowrap;">
+                ${dayjs(req.createdAt).format('YYYY-MM-DD HH:mm:ss')}
+              </span>
+            </div>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -2px;">
+            ${req.ip || 'Unknown IP'}
+          </div>
+        `;
+        listEl.appendChild(li);
+      });
+    }
+
+    function selectRequest(id) {
+      selectedrequestId = id;
+
+      // Update active state in list
+      document.querySelectorAll('.request-item').forEach(el => el.classList.remove('active'));
+      const activeIdx = requestsCache.findIndex(r => r._id === id);
+      if (activeIdx >= 0) {
+        const listItems = document.getElementById('request-list').children;
+        if (listItems[activeIdx]) listItems[activeIdx].classList.add('active');
+        renderDetails(requestsCache[activeIdx]);
+      }
+    }
+
+    function renderDetails(req) {
+      document.getElementById('empty-state').style.display = 'none';
+      const detailsEl = document.getElementById('request-details');
+      detailsEl.style.display = 'flex';
+
+      // Safe Access Helper
+      const getEntries = (obj) => {
+        if (!obj) return [];
+        if (typeof obj !== 'object') return [];
+        return Object.entries(obj);
+      };
+
+      // Format headers
+      const headers = getEntries(req.headers);
+      const headersHtml = headers.length ? headers.map(([k, v]) => `
+        <div class="data-row">
+            <div class="data-key">${k}</div>
+            <div class="data-val">${v}</div>
+        </div>
+      `).join('') : '<div style="padding: 0.5rem; color: var(--text-secondary);">No headers</div>';
+
+      // Format Query
+      const query = getEntries(req.query);
+      const queryHtml = query.length ? query.map(([k, v]) => `
+        <div class="data-row">
+            <div class="data-key">${k}</div>
+            <div class="data-val">${v}</div>
+        </div>
+      `).join('') : '<div style="padding: 0.5rem; color: var(--text-secondary);">No query parameters</div>';
+
+      // Format Body
+      let bodyContent = 'No body content';
+      if (req.body) {
+        if (typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+          bodyContent = JSON.stringify(req.body, null, 2);
+        } else if (typeof req.body === 'string' && req.body.trim().length > 0) {
+          bodyContent = req.body;
+        }
+      }
+
+      // Format Form Values if urlencoded
+      const ct = req.headers['content-type'] || '';
+      const isUrlEncoded = ct.includes('application/x-www-form-urlencoded');
+      let formValuesHtml = '';
+      if (isUrlEncoded && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+        const formEntries = getEntries(req.body);
+        formValuesHtml = formEntries.map(([k, v]) => `
+            <div class="data-row">
+                <div class="data-key">${k}</div>
+                <div class="data-val">${v}</div>
+            </div>
+          `).join('');
+      }
+
+      const displayRawBody = req.rawBody || bodyContent;
+
+      // Format Response Body and Headers
+      let responseBody = 'No response body';
+      let responseHeadersHtml = '<div style="color: var(--text-secondary);">No response headers</div>';
+      let statusClass = 'status-200';
+      let statusText = '200 OK';
+
+      if (req.response) {
+        statusText = `${req.response.status}`;
+        if (req.response.status >= 200 && req.response.status < 300) statusClass = 'status-success';
+        else if (req.response.status >= 300 && req.response.status < 400) statusClass = 'status-redirect';
+        else if (req.response.status >= 400 && req.response.status < 500) statusClass = 'status-client-error';
+        else if (req.response.status >= 500) statusClass = 'status-server-error';
+
+        responseBody = req.response.body || 'No content';
+
+        if (req.response.headers) {
+          const resHeaders = getEntries(req.response.headers);
+          if (resHeaders.length) {
+            responseHeadersHtml = resHeaders.map(([k, v]) => `
+                    <div class="data-row">
+                        <div class="data-key">${k}</div>
+                        <div class="data-val">${v}</div>
+                    </div>
+                  `).join('');
+          }
+        }
+      }
+
+      const locationText = req.location
+        ? `<span style="color: var(--border-color); font-weight: 300;">|</span> <span style="font-size: 0.7rem; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;"><span>${req.location.isLocal ? '🏠' : '📍'}</span>${req.location.city}${req.location.country ? ', ' + req.location.country : ''}</span>`
+        : '';
+
+      detailsEl.innerHTML = `
+        <!-- Top Header for Request -->
+        <div class="details-header" style="background: var(--card-bg); padding: 0.4rem 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="method-badge method-${req.method}" style="font-size: 0.65rem; padding: 2px 6px; min-width: 45px; text-align: center;">${req.method}</span>
+                <span class="details-path" style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">/${endpointId}${req.path ? (req.path.startsWith('/') ? req.path : '/' + req.path) : ''}</span>
+                <span style="color: var(--border-color); font-weight: 300;">|</span>
+                <span class="status-badge ${statusClass}" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 3px;">${statusText}</span>
+                <span style="color: var(--border-color); font-weight: 300;">|</span>
+                <span style="font-size: 0.7rem; color: var(--text-secondary); font-family: monospace;">${req.ip || 'Unknown IP'}</span>
+                ${locationText}
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem;">
+                    <span>${dayjs(req.createdAt).format('YYYY-MM-DD HH:mm:ss')}</span>
+                    <span class="time-ago-chip">${dayjs(req.createdAt).fromNow()}</span>
+                </div>
+                <button class="action-btn" onclick="copyRequestAsCurl(this, '${req._id}')" title="Copy as cURL" style="margin-left: 0.5rem;">
+                    <span style="font-size: 0.85rem;">📋</span>
+                    <span style="font-size: 0.7rem; font-weight: 600;">Copy as cURL</span>
+                </button>
+                <button class="action-btn delete-btn" onclick="deleteSelectedRequest('${req._id}')" title="Delete Request" style="margin-left: 0.2rem;">
+                    <span style="font-size: 0.85rem;">🗑️</span>
+                    <span style="font-size: 0.7rem; font-weight: 600;">Delete</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="details-body" style="padding: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+            
+            <!-- Section 1: Request Info (Scrollable) -->
+            <div style="flex: 8.5; overflow-y: auto; border-bottom: 2px solid var(--border-color); background-color: var(--card-bg);">
+                <!-- Row 1: Split Metadata & Headers -->
+                <div class="split-view" style="flex: 0 0 auto; min-height: auto; border-bottom: 1px solid var(--border-color);">
+                    
+                    <!-- Left: Metadata -->
+                    <div class="split-col" style="flex: 0 0 40%; max-width: 400px; border-right: 1px solid var(--border-color);">
+                        <div class="section-header" onclick="toggleSection(this)">Request Details</div>
+                        <div class="section-content">
+                            <div class="data-table">
+                                <div class="data-row">
+                                    <div class="data-key" style="width: 80px;">Host</div>
+                                    <div class="data-val">${req.headers['host'] || req.hostname || 'Unknown'}</div>
+                                </div>
+                                <div class="data-row">
+                                    <div class="data-key" style="width: 80px;">Client IP</div>
+                                    <div class="data-val">${req.ip || 'Unknown'}</div>
+                                </div>
+                                <div class="data-row">
+                                    <div class="data-key" style="width: 80px;">Date</div>
+                                    <div class="data-val">${dayjs(req.createdAt).format('YYYY-MM-DD HH:mm:ss')}</div>
+                                </div>
+                                <div class="data-row">
+                                    <div class="data-key" style="width: 80px;">ID</div>
+                                    <div class="data-val">${req._id}</div>
+                                </div>
+                                 <div class="data-row">
+                                    <div class="data-key" style="width: 80px;">Size</div>
+                                    <div class="data-val">${displayRawBody.length} bytes</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Headers -->
+                    <div class="split-col" style="flex: 1;">
+                        <div class="section-header" onclick="toggleSection(this)">Headers</div>
+                        <div class="section-content">
+                            <div class="data-table">
+                                ${headersHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2: Query Params (if any) -->
+                ${req.query && Object.keys(req.query).length ? `
+                    <div class="section-header" onclick="toggleSection(this)" style="border-top: none;">Query Strings</div>
+                    <div class="section-content">
+                        <div class="data-table" style="border-bottom: 1px solid var(--border-color);">
+                            ${queryHtml}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Row 3: Request Content -->
+                <div class="section-header" onclick="toggleSection(this)" style="border-top: none;">${formValuesHtml ? 'Form Values' : 'Request Content'}</div>
+                <div class="section-content" style="padding: 0; background-color: var(--card-bg);">
+                    ${formValuesHtml ? `
+                        <div class="data-table">
+                            ${formValuesHtml}
+                        </div>
+                    ` : `
+                        <div style="padding: 0; background-color: var(--bg-color);">
+                             <pre class="code-block" style="margin: 0; border: none; border-radius: 0; background: transparent; overflow: visible; color: var(--text-primary);">${displayRawBody}</pre>
+                        </div>
+                    `}
+                </div>
+            </div>
+
+            <!-- Section 2: Response Output (Scrollable) -->
+            <div style="flex: 1.5; overflow-y: auto; background-color: var(--bg-color);">
+                 <div class="section-header" onclick="toggleSection(this)" style="position: sticky; top: 0; border-top: none; z-index: 5;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span>Response Output</span>
+                        <span class="status-badge ${statusClass}" style="font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; font-weight: 700;">${statusText}</span>
+                    </div>
+                </div>
+                
+                <div class="section-content">
+                    <div class="data-table">
+                        ${responseHeadersHtml}
+                    </div>
+                    <pre class="code-block" style="margin: 0; border: none; border-radius: 0; background: var(--card-bg); border-top: 1px solid var(--border-color); padding: 1rem; color: var(--text-primary);">${responseBody}</pre>
+                </div>
+            </div>
+        </div>
+      `;
+    }
+
+    function changePage(delta) {
+      const newPage = currentPage + delta;
+      if (newPage > 0 && newPage <= totalPages) {
+        fetchRequests(newPage);
+      }
+    }
+
+    function updatePagination() {
+      const displayTotal = totalPages === 0 ? 0 : totalPages;
+      const displayCurrent = totalPages === 0 ? 0 : currentPage;
+      document.getElementById('page-info').innerText = `Page ${displayCurrent} of ${displayTotal}`;
+      document.getElementById('prev-btn').disabled = currentPage <= 1;
+      document.getElementById('next-btn').disabled = currentPage >= totalPages || totalPages === 0;
+    }
+
+    // Modal Logic
+    const modal = document.getElementById('settings-modal');
+
+    async function openSettings() {
+      modal.style.display = 'flex';
+      // Load current config
+      try {
+        const res = await fetch(`/api/config/${endpointId}`);
+        const config = await res.json();
+
+        document.getElementById('resp-status').value = config.status || 200;
+        document.getElementById('resp-body').value = config.body || 'Webhook Received';
+        document.getElementById('resp-content-type').value = config.headers ? config.headers['Content-Type'] : 'text/plain';
+        document.getElementById('resp-delay').value = config.delay || 0;
+
+      } catch (e) {
+        console.error("Error loading config", e);
+      }
+    }
+
+    function closeSettings() {
+      modal.style.display = 'none';
+    }
+
+    async function saveSettings() {
+      const status = parseInt(document.getElementById('resp-status').value);
+      const body = document.getElementById('resp-body').value;
+      const contentType = document.getElementById('resp-content-type').value;
+      const delay = parseInt(document.getElementById('resp-delay').value);
+
+      const config = {
+        status,
+        body,
+        headers: { 'Content-Type': contentType },
+        delay
+      };
+
+      try {
+        await fetch(`/api/config/${endpointId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        closeSettings();
+        alert('Settings saved!');
+      } catch (e) {
+        alert('Failed to save settings');
+      }
+    }
+
+    // Close modal properly logic
+    window.onclick = function (event) {
+      if (event.target == modal) {
+        closeSettings();
+      }
+    }
+
+    async function deleteSelectedRequest(id) {
+      if (!confirm('Are you sure you want to delete this request?')) return;
+
+      try {
+        const response = await fetch(`/api/requests/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          // Refetch current page to pull in the next item from subsequent pages
+          await fetchRequests(currentPage);
+
+          // If the page is now empty and we're not on page 1, go back one page
+          if (requestsCache.length === 0 && currentPage > 1) {
+            fetchRequests(currentPage - 1);
+          } else if (requestsCache.length > 0) {
+            // Select the first item in the refreshed list
+            selectRequest(requestsCache[0]._id);
+          } else {
+            // No requests left at all
+            selectedrequestId = null;
+            document.getElementById('request-details').innerHTML = '';
+            document.getElementById('request-details').style.display = 'none';
+            document.getElementById('empty-state').style.display = 'flex';
+          }
+        }
+      } catch (e) {
+        alert('Failed to delete request');
+      }
+    }
+
+    // Initial fetch
+    fetchRequests();
+
+    // SSE Subscription
+    const eventSource = new EventSource(`/events/${endpointId}`);
+
+    eventSource.onopen = function () {
+      console.log("SSE Connected");
+    };
+
+    eventSource.onmessage = function (event) {
+      console.log("SSE Message:", event.data);
+      try {
+        const newRequest = JSON.parse(event.data);
+
+        if (!newRequest || !newRequest._id) {
+          console.warn("Invalid SSE message format", newRequest);
+          return;
+        }
+
+        // Add to cache
+        requestsCache.unshift(newRequest);
+
+        // If we are on page 1, we should update the UI
+        if (currentPage === 1) {
+          // If we have more than 10 items now, remove the last one
+          if (requestsCache.length > 10) {
+            requestsCache.pop();
+          }
+          renderList(requestsCache);
+
+          if (!selectedrequestId) {
+            selectRequest(newRequest._id);
+          }
+
+          // Also hide empty state if visible
+          document.getElementById('empty-state').style.display = 'none';
+        }
+      } catch (e) {
+        console.error("Error parsing SSE message", e);
+      }
+    };
+
+    eventSource.onerror = function (err) {
+      console.error("EventSource failed:", err);
+      // EventSource automatically reconnects, but logging helps debugging
+    };
+  </script>
+</body>
+
+</html>
