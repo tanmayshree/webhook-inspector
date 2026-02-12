@@ -4,16 +4,16 @@ A simple, real-time webhook inspector built with Node.js, Express, MongoDB, and 
 
 ## Features
 
--   Inspect HTTP requests sent to unique endpoints.
--   View headers, query parameters, body (JSON, text, raw), and more.
--   Real-time updates via polling.
--   Pagination logic to browse past requests.
--   Clean, dark-mode UI.
+- Inspect HTTP requests sent to unique endpoints.
+- View headers, query parameters, body (JSON, text, raw), and more.
+- Real-time updates via polling.
+- Pagination logic to browse past requests.
+- Clean, dark-mode UI.
 
 ## Prerequisites
 
--   Node.js (v14 or later)
--   MongoDB (running locally on default port 27017)
+- Node.js (v14 or later)
+- MongoDB (running locally on default port 27017)
 
 ## Installation
 
@@ -42,6 +42,7 @@ Send webhooks to:
 `http://localhost:3000/YOUR_ENDPOINT_ID`
 
 Example using cURL:
+
 ```bash
 curl -X POST -H "Content-Type: application/json" -d '{"message": "Hello World"}' http://localhost:3000/demo
 ```

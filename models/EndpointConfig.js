@@ -1,38 +1,38 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const EndpointConfigSchema = new mongoose.Schema({
   endpointId: {
     type: String,
     required: true,
     unique: true,
-    index: true
+    index: true,
   },
   status: {
     type: Number,
-    default: 200
+    default: 200,
   },
   headers: {
     type: Object,
-    default: { 'Content-Type': 'text/plain' }
+    default: { "Content-Type": "text/plain" },
   },
   body: {
     type: String,
-    default: 'Webhook Received'
+    default: "Webhook Received",
   },
   delay: {
     type: Number,
-    default: 0
+    default: 0,
   },
   updatedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
 // Update the updatedAt field on save
-EndpointConfigSchema.pre('save', function (next) {
+EndpointConfigSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   next();
 });
 
-module.exports = mongoose.model('EndpointConfig', EndpointConfigSchema);
+module.exports = mongoose.model("EndpointConfig", EndpointConfigSchema);
