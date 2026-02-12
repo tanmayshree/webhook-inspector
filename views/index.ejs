@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Webhook Inspector - <%= endpointId %></title>
+    <title>Livehook Inspector - <%= endpointId %></title>
     <link rel="stylesheet" href="/style.css" />
     <link
       rel="icon"
@@ -18,7 +18,7 @@
 
   <body>
     <header>
-      <div class="logo"><span>📡</span> Webhook Inspector</div>
+      <div class="logo"><span>📡</span> Livehook Inspector</div>
       <div style="display: flex; gap: 0.5rem; align-items: center">
         <div
           class="endpoint-info"
@@ -97,7 +97,7 @@
               rows="4"
               style="font-family: monospace; font-size: 0.8rem"
             >
-Webhook Received</textarea
+Livehook Received</textarea
             >
           </div>
         </div>
@@ -284,7 +284,7 @@ Webhook Received</textarea
       document.getElementById("endpoint-display").innerText =
         `curl -X POST ${endpointUrl} \\
   -H "Content-Type: application/json" \\
-  -d '{"message": "Hello from Webhook!"}'`;
+  -d '{"message": "Hello from Livehook!"}'`;
 
       function copyExampleCurl() {
         const text = document.getElementById("endpoint-display").innerText;
@@ -682,7 +682,7 @@ Webhook Received</textarea
 
           document.getElementById("resp-status").value = config.status || 200;
           document.getElementById("resp-body").value =
-            config.body || "Webhook Received";
+            config.body || "Livehook Received";
           document.getElementById("resp-content-type").value = config.headers
             ? config.headers["Content-Type"]
             : "text/plain";

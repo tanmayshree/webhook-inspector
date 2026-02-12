@@ -98,7 +98,7 @@ app.get("/api/config/:endpointId", async (req, res) => {
       config = {
         status: 200,
         headers: { "Content-Type": "text/plain" },
-        body: "Webhook Received",
+        body: "Livehook Received",
         delay: 0,
       };
     }
@@ -230,7 +230,7 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
   let responseData = {
     status: 200,
     headers: { "Content-Type": "text/plain" },
-    body: "Webhook Received",
+    body: "Livehook Received",
     delay: 0,
   };
 
@@ -303,7 +303,7 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
       }
     });
 
-    // Respond to the webhook sender
+    // Respond to the livehook sender
     res.set(responseData.headers);
     res.status(responseData.status).send(responseData.body);
   } catch (error) {
@@ -316,6 +316,6 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(
-    `View your webhook at: http://localhost:${PORT}/view/YOUR_ENDPOINT_ID`,
+    `View your livehook at: http://localhost:${PORT}/view/YOUR_ENDPOINT_ID`,
   );
 });

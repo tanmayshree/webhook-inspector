@@ -17,7 +17,7 @@ const EndpointConfigSchema = new mongoose.Schema({
   },
   body: {
     type: String,
-    default: "Webhook Received",
+    default: "Livehook Received",
   },
   delay: {
     type: Number,

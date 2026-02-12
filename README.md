@@ -1,6 +1,6 @@
-# Webhook Inspector
+# Livehook Inspector
 
-A simple, real-time webhook inspector built with Node.js, Express, MongoDB, and EJS.
+A simple, real-time livehook inspector built with Node.js, Express, MongoDB, and EJS.
 
 ## Features
 
@@ -38,7 +38,7 @@ A simple, real-time webhook inspector built with Node.js, Express, MongoDB, and 
 
 ## Sending Requests
 
-Send webhooks to:
+Send livehooks to:
 `http://localhost:3000/YOUR_ENDPOINT_ID`
 
 Example using cURL:
