@@ -197,6 +197,24 @@ const getLocation = async (ip) => {
   return null;
 };
 
+const filterHeaders = (headers) => {
+  const filtered = {};
+  const ignorePrefixes = ["x-vercel-", "x-forwarded-", "x-real-"];
+  const ignoreExact = ["forwarded", "via", "connect-install-id", "purpose"];
+
+  Object.keys(headers).forEach((key) => {
+    const lowKey = key.toLowerCase();
+    const shouldIgnore =
+      ignorePrefixes.some((prefix) => lowKey.startsWith(prefix)) ||
+      ignoreExact.includes(lowKey);
+
+    if (!shouldIgnore) {
+      filtered[key] = headers[key];
+    }
+  });
+  return filtered;
+};
+
 // Ingestion Route - Capture All Requests to an Endpoint
 app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
   const endpointId = req.params[0];
@@ -257,7 +275,7 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
       method: req.method,
       path: path,
       url: req.originalUrl,
-      headers: req.headers,
+      headers: filterHeaders(req.headers),
       query: req.query,
       body: req.body,
       rawBody: req.rawBody || "",
