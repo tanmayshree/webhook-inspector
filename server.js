@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const axios = require("axios");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const path = require("path");
@@ -102,6 +103,7 @@ app.get("/api/config/:endpointId", async (req, res) => {
         delay: 0,
         forwardingEnabled: false,
         forwardingUrl: "",
+        forwardingMethod: "server", // Default to server
       };
     }
     res.json(config);
@@ -245,6 +247,9 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
         headers: savedConfig.headers,
         body: savedConfig.body,
         delay: savedConfig.delay,
+        forwardingEnabled: savedConfig.forwardingEnabled,
+        forwardingUrl: savedConfig.forwardingUrl,
+        forwardingMethod: savedConfig.forwardingMethod,
       };
     }
   } catch (e) {
@@ -307,7 +312,42 @@ app.all(/^\/([a-zA-Z0-9_\-]+)(.*)/, async (req, res) => {
 
     // Respond to the livehook sender
     res.set(responseData.headers);
-    res.status(responseData.status).send(responseData.body);
+
+    // Server-side forwarding logic
+    if (
+      responseData.forwardingEnabled &&
+      responseData.forwardingUrl &&
+      responseData.forwardingMethod === "server"
+    ) {
+      // Don't await - fire and forget
+      (async () => {
+        try {
+          const headers = { ...req.headers };
+          delete headers["host"];
+          delete headers["content-length"];
+          // Forwarding headers
+          await axios({
+            method: req.method,
+            url: responseData.forwardingUrl,
+            headers: headers,
+            data: req.rawBody,
+            timeout: 5000, // 5s timeout
+          });
+          console.log(
+            `[Server Forward] Success -> ${responseData.forwardingUrl}`,
+          );
+        } catch (err) {
+          console.error(
+            `[Server Forward] Failed -> ${responseData.forwardingUrl}: ${err.message}`,
+          );
+        }
+      })();
+    }
+
+    res
+      .status(responseData.status)
+      .set(responseData.headers)
+      .send(responseData.body);
   } catch (error) {
     console.error("Error saving request:", error);
     res.status(500).send("Internal Server Error");

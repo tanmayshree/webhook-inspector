@@ -31,6 +31,11 @@ const EndpointConfigSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  forwardingMethod: {
+    type: String,
+    enum: ["client", "server"],
+    default: "server",
+  },
   updatedAt: {
     type: Date,
     default: Date.now,

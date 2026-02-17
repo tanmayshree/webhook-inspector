@@ -121,15 +121,19 @@ Livehook Received</textarea
             </label>
           </div>
 
-          <div id="forwarding-url-container" class="forwarding-url-group">
-            <div class="form-group">
-              <label>Forwarding URL</label>
-              <input
-                type="url"
-                id="forward-url"
-                placeholder="https://your-api.com/webhook"
-              />
-            </div>
+          <div class="form-group" id="forwarding-url-container" style="display: none; margin-top: 1rem;">
+              <label class="form-label" style="margin-bottom: 0.5rem;">Target Destination</label>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                  <input type="text" class="form-input" id="forward-url" placeholder="https://api.example.com/webhook" style="flex: 1;">
+                  <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">via</span>
+                  <select class="form-input" id="forward-method" style="width: auto; padding-right: 2rem; cursor: pointer;">
+                      <option value="client">Browser</option>
+                      <option value="server">Server</option>
+                  </select>
+              </div>
+              <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.35rem;">
+                  <strong>Browser</strong> uses your active tab (good for localhost). <strong>Server</strong> uses the backend.
+              </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -846,6 +850,8 @@ Livehook Received</textarea
         forwardingToggle.checked = endpointConfig.forwardingEnabled === true;
         document.getElementById("forward-url").value =
           endpointConfig.forwardingUrl || "";
+        document.getElementById("forward-method").value =
+          endpointConfig.forwardingMethod || "server";
         toggleForwardingInput();
       }
 
@@ -878,6 +884,7 @@ Livehook Received</textarea
           forwardingEnabled:
             document.getElementById("forwarding-toggle").checked,
           forwardingUrl: document.getElementById("forward-url").value.trim(),
+          forwardingMethod: document.getElementById("forward-method").value,
         };
 
         if (config.forwardingEnabled && config.forwardingUrl) {
@@ -911,7 +918,8 @@ Livehook Received</textarea
       }
 
       async function forwardRequest(reqData, targetUrl) {
-        console.log(`Forwarding request to: ${targetUrl}`);
+         // ... existing forward logic ...
+         console.log(`Forwarding request to: ${targetUrl}`);
         try {
           // Prepare headers (excluding internal/hop-by-hop ones)
           const headers = { ...reqData.headers };
@@ -940,7 +948,7 @@ Livehook Received</textarea
           console.error(`Failed to forward request to ${targetUrl}:`, error);
         }
       }
-
+      
       // Close modal properly logic
       window.onclick = function (event) {
         if (event.target == modal) {
@@ -1020,9 +1028,11 @@ Livehook Received</textarea
               updatePagination();
             }
 
+            // Client-side forwarding check
             if (
               endpointConfig.forwardingEnabled &&
-              endpointConfig.forwardingUrl
+              endpointConfig.forwardingUrl &&
+              endpointConfig.forwardingMethod === 'client'
             ) {
               forwardRequest(newRequest, endpointConfig.forwardingUrl);
             }
