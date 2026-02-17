@@ -181,12 +181,12 @@
       }
 
       function generateRandom() {
-        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-        let randomId = "";
-        for (let i = 0; i < 16; i++) {
-          if (i > 0 && i % 4 === 0) randomId += "-";
-          randomId += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
+        const randomId = crypto
+          .randomUUID()
+          .replace(/-/g, "")
+          .slice(0, 16)
+          .match(/.{1,4}/g)
+          .join("-");
         document.getElementById("endpoint-id").value = randomId;
         document.getElementById("endpoint-id").focus();
       }

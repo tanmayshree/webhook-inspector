@@ -23,6 +23,14 @@ const EndpointConfigSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  forwardingEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  forwardingUrl: {
+    type: String,
+    default: "",
+  },
   updatedAt: {
     type: Date,
     default: Date.now,

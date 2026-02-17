@@ -17,9 +17,16 @@
   </head>
 
   <body>
+    <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
     <header>
-      <div class="logo"><span>📡</span> Livehook Inspector</div>
-      <div style="display: flex; gap: 0.5rem; align-items: center">
+      <div class="header-left" style="display: flex; align-items: center; gap: 0.5rem;">
+        <div class="sidebar-toggle" onclick="toggleSidebar()">
+          <span>☰</span>
+        </div>
+        <div class="logo"><span>📡</span> Livehook Inspector</div>
+      </div>
+      <div class="header-controls">
         <div
           class="endpoint-info"
           onclick="toggleTheme()"
@@ -30,24 +37,14 @@
         </div>
         <div class="endpoint-info" onclick="copyEndpoint()" title="Copy URL">
           <span id="copy-status" style="display: flex; align-items: center">
-            <span
-              style="
-                font-size: 0.65rem;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                font-weight: 700;
-                margin-right: 0.25rem;
-                opacity: 0.8;
-              "
-              >Click to Copy</span
-            >
+            <span class="click-to-copy-text">Click to Copy</span>
             <span class="copy-icon">📋</span>
           </span>
           <span id="endpoint-url">...</span>
         </div>
         <div class="endpoint-info" onclick="openSettings()" title="Settings">
           <span class="copy-icon">⚙️</span>
-          <span>Settings</span>
+          <span class="settings-text">Settings</span>
         </div>
       </div>
     </header>
@@ -68,6 +65,8 @@
                 type="number"
                 id="resp-status"
                 value="200"
+                min="100"
+                max="599"
                 placeholder="e.g. 200"
               />
             </div>
@@ -77,6 +76,7 @@
                 type="number"
                 id="resp-delay"
                 value="0"
+                min="0"
                 placeholder="e.g. 1000"
               />
             </div>
@@ -99,6 +99,37 @@
             >
 Livehook Received</textarea
             >
+          </div>
+
+          <div
+            class="switch-group"
+            style="margin-top: 1rem; border-bottom: none; padding-bottom: 0"
+          >
+            <div class="form-group" style="margin-bottom: 0">
+              <label>Request Forwarding</label>
+              <div style="font-size: 0.75rem; color: var(--text-secondary)">
+                Forward incoming requests to another URL
+              </div>
+            </div>
+            <label class="switch">
+              <input
+                type="checkbox"
+                id="forwarding-toggle"
+                onchange="toggleForwardingInput()"
+              />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div id="forwarding-url-container" class="forwarding-url-group">
+            <div class="form-group">
+              <label>Forwarding URL</label>
+              <input
+                type="url"
+                id="forward-url"
+                placeholder="https://your-api.com/webhook"
+              />
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -127,6 +158,20 @@ Livehook Received</textarea
         <ul class="request-list" id="request-list">
           <!-- Request items will be injected here -->
         </ul>
+        <div id="list-shimmer" class="list-shimmer">
+          <% for(let i=0; i<10; i++) { %>
+          <div class="request-item skel-list-container">
+            <div class="req-meta" style="align-items: flex-start;">
+              <div class="skeleton-item skel-method"></div>
+              <div class="skel-time-stack">
+                <div class="skeleton-item skel-time-lg"></div>
+                <div class="skeleton-item skel-time-sm"></div>
+              </div>
+            </div>
+            <div class="skeleton-item skel-ip"></div>
+          </div>
+          <% } %>
+        </div>
         <div class="pagination">
           <button
             id="prev-btn"
@@ -193,6 +238,16 @@ Livehook Received</textarea
         <div id="request-details" class="request-details" style="display: none">
           <!-- Details will be injected here -->
         </div>
+
+        <div id="details-shimmer" class="shimmer-wrapper">
+          <div class="skeleton-item skel-header"></div>
+          <div class="skeleton-item skel-tabs"></div>
+          <div class="skeleton-item skel-title"></div>
+          <div class="skeleton-item skel-row"></div>
+          <div class="skeleton-item skel-row"></div>
+          <div class="skeleton-item skel-row"></div>
+          <div class="skeleton-item skel-block"></div>
+        </div>
       </main>
     </div>
 
@@ -204,6 +259,14 @@ Livehook Received</textarea
       let totalPages = 1;
       let selectedrequestId = null;
       let requestsCache = [];
+      let endpointConfig = {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+        body: "Livehook Received",
+        delay: 0,
+        forwardingEnabled: false,
+        forwardingUrl: "",
+      };
 
       // Theme Logic
       const savedTheme = localStorage.getItem("theme") || "light";
@@ -251,16 +314,29 @@ Livehook Received</textarea
 
         // Add headers
         for (const [key, value] of Object.entries(req.headers)) {
-          // Skip host usually
-          if (key.toLowerCase() === "host") continue;
+          // Skip content-length as curl calculates it automatically
+          if (key.toLowerCase() === "content-length") continue;
           curl += ` \\\n  -H "${key}: ${value}"`;
         }
 
         // Add body if exists and not GET
-        if (req.method !== "GET" && req.rawBody) {
-          // Escape single quotes in body for shell
-          const escapedBody = req.rawBody.replace(/'/g, "'\\''");
-          curl += ` \\\n  -d '${escapedBody}'`;
+        if (req.method !== "GET") {
+             let bodyToCopy = req.rawBody;
+             
+             // Fallback if rawBody is missing but we have a body object/string
+             if (!bodyToCopy && req.body) {
+                 if (typeof req.body === 'object') {
+                     bodyToCopy = JSON.stringify(req.body);
+                 } else {
+                     bodyToCopy = String(req.body);
+                 }
+             }
+
+             if (bodyToCopy) {
+                  // Escape single quotes in body for shell
+                  const escapedBody = bodyToCopy.replace(/'/g, "'\\''");
+                  curl += ` \\\n  -d '${escapedBody}'`;
+             }
         }
 
         navigator.clipboard.writeText(curl);
@@ -320,6 +396,14 @@ Livehook Received</textarea
         const refreshBtn = document.querySelector(".refresh-btn");
         if (refreshBtn) refreshBtn.classList.add("spinning");
 
+        // Show shimmer if it's the very first load and we don't have selected request
+        if (!selectedrequestId) {
+          document.getElementById("empty-state").style.display = "none";
+          document.getElementById("details-shimmer").style.display = "flex";
+          document.getElementById("list-shimmer").style.display = "flex";
+          document.getElementById("request-list").style.display = "none";
+        }
+
         try {
           const response = await fetch(
             `/api/requests/${endpointId}?page=${page}&limit=10`,
@@ -337,6 +421,9 @@ Livehook Received</textarea
           if (requestsCache.length > 0 && !selectedrequestId) {
             selectRequest(requestsCache[0]._id);
           } else if (requestsCache.length === 0) {
+            document.getElementById("details-shimmer").style.display = "none";
+            document.getElementById("list-shimmer").style.display = "none";
+            document.getElementById("request-list").style.display = "block";
             document.getElementById("empty-state").style.display = "flex";
             document.getElementById("request-details").style.display = "none";
           } else if (requestsCache.length > 0 && selectedrequestId) {
@@ -347,6 +434,9 @@ Livehook Received</textarea
             if (stillHere) renderDetails(stillHere);
           }
         } catch (error) {
+          document.getElementById("details-shimmer").style.display = "none";
+          document.getElementById("list-shimmer").style.display = "none";
+          document.getElementById("request-list").style.display = "block";
           console.error("Error fetching requests:", error);
         } finally {
           setTimeout(() => {
@@ -356,7 +446,9 @@ Livehook Received</textarea
       }
 
       function renderList(requests) {
+        document.getElementById("list-shimmer").style.display = "none";
         const listEl = document.getElementById("request-list");
+        listEl.style.display = "block";
         listEl.innerHTML = "";
 
         requests.forEach((req) => {
@@ -364,7 +456,10 @@ Livehook Received</textarea
           li.className = `request-item ${selectedrequestId === req._id ? "active" : ""}`;
           li.onclick = () => selectRequest(req._id);
 
-          const time = dayjs(req.createdAt).fromNow();
+          const time =
+            typeof dayjs !== "undefined"
+              ? dayjs(req.createdAt).fromNow()
+              : "Just now";
           const methodClass = `method-${req.method}`;
 
           li.innerHTML = `
@@ -373,7 +468,7 @@ Livehook Received</textarea
             <div style="text-align: right; display: flex; flex-direction: column; gap: 2px;">
               <span style="font-weight: 600; font-size: 0.7rem; color: var(--text-primary);">${time}</span>
               <span style="font-size: 0.6rem; color: var(--text-secondary); white-space: nowrap;">
-                ${dayjs(req.createdAt).format("YYYY-MM-DD HH:mm:ss")}
+                ${typeof dayjs !== "undefined" ? dayjs(req.createdAt).format("YYYY-MM-DD HH:mm:ss") : req.createdAt}
               </span>
             </div>
           </div>
@@ -403,6 +498,7 @@ Livehook Received</textarea
 
       function renderDetails(req) {
         document.getElementById("empty-state").style.display = "none";
+        document.getElementById("details-shimmer").style.display = "none";
         const detailsEl = document.getElementById("request-details");
         detailsEl.style.display = "flex";
 
@@ -481,7 +577,30 @@ Livehook Received</textarea
             .join("");
         }
 
-        const displayRawBody = req.rawBody || bodyContent;
+        let displayRawBody = req.rawBody || bodyContent;
+        
+        // Check if it looks like JSON for enabling the button, but don't format by default
+        let isJson = false;
+        try {
+          if (
+            typeof displayRawBody === "string" &&
+            (displayRawBody.trim().startsWith("{") ||
+              displayRawBody.trim().startsWith("["))
+          ) {
+             // Just validation, no formatting
+             JSON.parse(displayRawBody);
+             isJson = true;
+          } else if (
+            typeof req.body === "object" &&
+            req.body !== null &&
+            Object.keys(req.body).length > 0
+          ) {
+            isJson = true;
+            if (!displayRawBody) displayRawBody = JSON.stringify(req.body); 
+          }
+        } catch (e) {
+          // Not valid JSON
+        }
 
         // Format Response Body and Headers
         let responseBody = "No response body";
@@ -502,6 +621,20 @@ Livehook Received</textarea
             statusClass = "status-server-error";
 
           responseBody = req.response.body || "No content";
+
+          // Try to pretty-print if it's JSON
+          try {
+            if (
+              typeof responseBody === "string" &&
+              (responseBody.trim().startsWith("{") ||
+                responseBody.trim().startsWith("["))
+            ) {
+              const parsed = JSON.parse(responseBody);
+              responseBody = JSON.stringify(parsed, null, 4);
+            }
+          } catch (e) {
+            // Keep as is
+          }
 
           if (req.response.headers) {
             const resHeaders = getEntries(req.response.headers);
@@ -526,8 +659,8 @@ Livehook Received</textarea
 
         detailsEl.innerHTML = `
         <!-- Top Header for Request -->
-        <div class="details-header" style="background: var(--card-bg); padding: 0.4rem 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div class="details-header details-header-container">
+            <div class="request-meta">
                 <span class="method-badge method-${req.method}" style="font-size: 0.65rem; padding: 2px 6px; min-width: 45px; text-align: center;">${req.method}</span>
                 <span class="details-path" style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">/${endpointId}${req.path ? (req.path.startsWith("/") ? req.path : "/" + req.path) : ""}</span>
                 <span style="color: var(--border-color); font-weight: 300;">|</span>
@@ -537,19 +670,21 @@ Livehook Received</textarea
                 ${locationText}
             </div>
             
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div class="request-actions">
                 <div style="font-size: 0.7rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.5rem;">
                     <span>${dayjs(req.createdAt).format("YYYY-MM-DD HH:mm:ss")}</span>
                     <span class="time-ago-chip">${dayjs(req.createdAt).fromNow()}</span>
                 </div>
-                <button class="action-btn" onclick="copyRequestAsCurl(this, '${req._id}')" title="Copy as cURL" style="margin-left: 0.5rem;">
-                    <span style="font-size: 0.85rem;">📋</span>
-                    <span style="font-size: 0.7rem; font-weight: 600;">Copy as cURL</span>
-                </button>
-                <button class="action-btn delete-btn" onclick="deleteSelectedRequest('${req._id}')" title="Delete Request" style="margin-left: 0.2rem;">
-                    <span style="font-size: 0.85rem;">🗑️</span>
-                    <span style="font-size: 0.7rem; font-weight: 600;">Delete</span>
-                </button>
+                <div class="action-buttons-group">
+                    <button class="action-btn" onclick="copyRequestAsCurl(this, '${req._id}')" title="Copy as cURL">
+                        <span style="font-size: 0.85rem;">📋</span>
+                        <span class="btn-label" style="font-size: 0.7rem; font-weight: 600;">Copy as cURL</span>
+                    </button>
+                    <button class="action-btn delete-btn" onclick="deleteSelectedRequest('${req._id}')" title="Delete Request">
+                        <span style="font-size: 0.85rem;">🗑️</span>
+                        <span class="btn-label" style="font-size: 0.7rem; font-weight: 600;">Delete</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -604,10 +739,12 @@ Livehook Received</textarea
                 ${
                   req.query && Object.keys(req.query).length
                     ? `
-                    <div class="section-header" onclick="toggleSection(this)" style="border-top: none;">Query Strings</div>
-                    <div class="section-content">
-                        <div class="data-table" style="border-bottom: 1px solid var(--border-color);">
-                            ${queryHtml}
+                    <div class="result-section">
+                        <div class="section-header" onclick="toggleSection(this)" style="border-top: none;">Query Strings</div>
+                        <div class="section-content">
+                            <div class="data-table" style="border-bottom: 1px solid var(--border-color);">
+                                ${queryHtml}
+                            </div>
                         </div>
                     </div>
                 `
@@ -615,23 +752,31 @@ Livehook Received</textarea
                 }
 
                 <!-- Row 3: Request Content -->
-                <div class="section-header" onclick="toggleSection(this)" style="border-top: none;">${formValuesHtml ? "Form Values" : "Request Content"}</div>
-                <div class="section-content" style="padding: 0; background-color: var(--card-bg);">
-                    ${
-                      formValuesHtml
-                        ? `
-                        <div class="data-table">
-                            ${formValuesHtml}
-                        </div>
-                    `
-                        : `
-                        <div style="padding: 0; background-color: var(--bg-color);">
-                             <pre class="code-block" style="margin: 0; border: none; border-radius: 0; background: transparent; overflow: visible; color: var(--text-primary);">${displayRawBody}</pre>
-                        </div>
-                    `
-                    }
-                </div>
+                <div class="result-section">
+                    <div class="section-header" style="border-top: none; justify-content: space-between; cursor: default;">
+                        <span onclick="toggleSection(this.parentElement)" style="cursor: pointer; flex: 1;">${formValuesHtml ? "Form Values" : "Request Content"}</span>
+                        ${!formValuesHtml && isJson ? `
+                            <div class="json-controls" style="display: flex; gap: 1rem; font-size: 0.65rem; margin-right: 0.5rem; align-items: center; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: var(--text-secondary);">
+                                <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" id="format-json-${req._id}" onchange="toggleJsonFormat('${req._id}')">
+                                    Format JSON
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer; user-select: none;">
+                                    <input type="checkbox" id="word-wrap-${req._id}" onchange="toggleWordWrap('${req._id}')" checked>
+                                    Word Wrap
+                                </label>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="section-content" style="border-bottom: 1px solid var(--border-color);">
+                        ${
+                          formValuesHtml
+                            ? `<div class="data-table">${formValuesHtml}</div>`
+                            : `<pre id="code-block-${req._id}" class="code-block" style="border: none; margin: 0; white-space: pre-wrap; overflow-x: hidden;"><code class="language-json">${displayRawBody}</code></pre>`
+                        }
+                    </div>
             </div>
+                </div>
 
             <!-- Section 2: Response Output (Scrollable) -->
             <div style="flex: 1.5; overflow-y: auto; background-color: var(--bg-color);">
@@ -675,21 +820,33 @@ Livehook Received</textarea
 
       async function openSettings() {
         modal.style.display = "flex";
-        // Load current config
+        // Always refresh config from server when opening settings
         try {
           const res = await fetch(`/api/config/${endpointId}`);
-          const config = await res.json();
-
-          document.getElementById("resp-status").value = config.status || 200;
-          document.getElementById("resp-body").value =
-            config.body || "Livehook Received";
-          document.getElementById("resp-content-type").value = config.headers
-            ? config.headers["Content-Type"]
-            : "text/plain";
-          document.getElementById("resp-delay").value = config.delay || 0;
+          endpointConfig = await res.json();
+          updateSettingsUI();
         } catch (e) {
           console.error("Error loading config", e);
+          updateSettingsUI(); // Use cached version as fallback
         }
+      }
+
+      function updateSettingsUI() {
+        document.getElementById("resp-status").value =
+          endpointConfig.status || 200;
+        document.getElementById("resp-body").value =
+          endpointConfig.body || "Livehook Received";
+        document.getElementById("resp-content-type").value =
+          endpointConfig.headers && endpointConfig.headers["Content-Type"]
+            ? endpointConfig.headers["Content-Type"]
+            : "text/plain";
+        document.getElementById("resp-delay").value = endpointConfig.delay || 0;
+
+        const forwardingToggle = document.getElementById("forwarding-toggle");
+        forwardingToggle.checked = endpointConfig.forwardingEnabled === true;
+        document.getElementById("forward-url").value =
+          endpointConfig.forwardingUrl || "";
+        toggleForwardingInput();
       }
 
       function closeSettings() {
@@ -700,25 +857,87 @@ Livehook Received</textarea
         const status = parseInt(document.getElementById("resp-status").value);
         const body = document.getElementById("resp-body").value;
         const contentType = document.getElementById("resp-content-type").value;
-        const delay = parseInt(document.getElementById("resp-delay").value);
+        const delay =
+          parseInt(document.getElementById("resp-delay").value) || 0;
+
+        if (status < 100 || status > 599) {
+          alert("Default Status Code must be between 100 and 599");
+          return;
+        }
+
+        if (delay < 0) {
+          alert("Delay cannot be negative");
+          return;
+        }
 
         const config = {
           status,
           body,
           headers: { "Content-Type": contentType },
           delay,
+          forwardingEnabled:
+            document.getElementById("forwarding-toggle").checked,
+          forwardingUrl: document.getElementById("forward-url").value.trim(),
         };
 
+        if (config.forwardingEnabled && config.forwardingUrl) {
+          try {
+            new URL(config.forwardingUrl);
+          } catch (e) {
+            alert("Please enter a valid URL for forwarding");
+            return;
+          }
+        }
+
         try {
-          await fetch(`/api/config/${endpointId}`, {
+          const res = await fetch(`/api/config/${endpointId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(config),
           });
+          endpointConfig = await res.json();
           closeSettings();
-          alert("Settings saved!");
         } catch (e) {
           alert("Failed to save settings");
+        }
+      }
+
+      function toggleForwardingInput() {
+        const toggle = document.getElementById("forwarding-toggle");
+        const container = document.getElementById("forwarding-url-container");
+        if (toggle && container) {
+          container.style.display = toggle.checked ? "block" : "none";
+        }
+      }
+
+      async function forwardRequest(reqData, targetUrl) {
+        console.log(`Forwarding request to: ${targetUrl}`);
+        try {
+          // Prepare headers (excluding internal/hop-by-hop ones)
+          const headers = { ...reqData.headers };
+          delete headers["connection"];
+          delete headers["keep-alive"];
+          delete headers["proxy-authenticate"];
+          delete headers["proxy-authorization"];
+          delete headers["te"];
+          delete headers["trailers"];
+          delete headers["transfer-encoding"];
+          delete headers["upgrade"];
+
+          await fetch(targetUrl, {
+            method: reqData.method,
+            headers: headers,
+            body:
+              reqData.method !== "GET" && reqData.method !== "HEAD"
+                ? reqData.rawBody
+                : undefined,
+            // Browsers often block non-CORS requests from JS.
+            // We use no-cors if possible, but headers might trigger preflight.
+            mode: "no-cors",
+          });
+          console.log(`Successfully forwarded request to ${targetUrl}`);
+        } catch (error) {
+          console.error(`Failed to forward request to ${targetUrl}:`, error);
         }
       }
 
@@ -759,53 +978,143 @@ Livehook Received</textarea
         }
       }
 
-      // Initial fetch
-      fetchRequests();
+      // Initialization Flow
+      async function init() {
+        // Start fetching requests immediately
+        fetchRequests(1);
 
-      // SSE Subscription
-      const eventSource = new EventSource(`/events/${endpointId}`);
-
-      eventSource.onopen = function () {
-        console.log("SSE Connected");
-      };
-
-      eventSource.onmessage = function (event) {
-        console.log("SSE Message:", event.data);
+        // Fetch config in parallel
         try {
-          const newRequest = JSON.parse(event.data);
-
-          if (!newRequest || !newRequest._id) {
-            console.warn("Invalid SSE message format", newRequest);
-            return;
-          }
-
-          // Add to cache
-          requestsCache.unshift(newRequest);
-
-          // If we are on page 1, we should update the UI
-          if (currentPage === 1) {
-            // If we have more than 10 items now, remove the last one
-            if (requestsCache.length > 10) {
-              requestsCache.pop();
-            }
-            renderList(requestsCache);
-
-            if (!selectedrequestId) {
-              selectRequest(newRequest._id);
-            }
-
-            // Also hide empty state if visible
-            document.getElementById("empty-state").style.display = "none";
-          }
+          const res = await fetch(`/api/config/${endpointId}`);
+          endpointConfig = await res.json();
+          toggleForwardingInput();
         } catch (e) {
-          console.error("Error parsing SSE message", e);
+          console.error("Failed to load initial config", e);
         }
-      };
 
-      eventSource.onerror = function (err) {
-        console.error("EventSource failed:", err);
-        // EventSource automatically reconnects, but logging helps debugging
-      };
-    </script>
-  </body>
+        // Setup SSE only once
+        setupSSE();
+      }
+
+      function setupSSE() {
+        const eventSource = new EventSource(`/events/${endpointId}`);
+
+        eventSource.onopen = () => console.log("SSE Connected");
+
+        eventSource.onmessage = (event) => {
+          console.log("SSE Message");
+          try {
+            const newRequest = JSON.parse(event.data);
+            if (!newRequest || !newRequest._id) return;
+
+            requestsCache.unshift(newRequest);
+
+            if (currentPage === 1) {
+              if (requestsCache.length > 10) requestsCache.pop();
+              renderList(requestsCache);
+              if (!selectedrequestId) selectRequest(newRequest._id);
+              document.getElementById("empty-state").style.display = "none";
+
+              // Increment totalPages if it was 0
+              if (totalPages === 0) totalPages = 1;
+              updatePagination();
+            }
+
+            if (
+              endpointConfig.forwardingEnabled &&
+              endpointConfig.forwardingUrl
+            ) {
+              forwardRequest(newRequest, endpointConfig.forwardingUrl);
+            }
+          } catch (e) {
+            console.error("Error parsing SSE message", e);
+          }
+        };
+
+        eventSource.onerror = (err) =>
+          console.error("EventSource failed:", err);
+      }
+
+      init();
+      function toggleSidebar() {
+      const sidebar = document.querySelector('.sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    }
+
+    // Close sidebar when clicking a request item on mobile
+    const requestList = document.querySelector('.request-list');
+    if (requestList) {
+        requestList.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && e.target.closest('li')) {
+                toggleSidebar();
+            }
+        });
+    }
+    function toggleJsonFormat(id) {
+        const checkbox = document.getElementById(`format-json-${id}`);
+        const codeBlock = document.getElementById(`code-block-${id}`);
+        const codeEl = codeBlock ? codeBlock.querySelector('code') : null;
+        const req = requestsCache.find(r => r._id === id);
+        
+        if (!req || !codeEl) return;
+        
+        let content = req.rawBody;
+        if ((!content || content.trim() === '') && typeof req.body === 'object') {
+             content = JSON.stringify(req.body);
+        }
+        if (!content) content = '';
+
+        if (checkbox.checked) {
+            try {
+                // If it's a string that looks like JSON, parse it first
+                const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+                // Use innerHTML for syntax highlighting
+                codeEl.innerHTML = syntaxHighlight(parsed);
+            } catch(e) {
+                codeEl.textContent = content;
+            }
+        } else {
+            codeEl.textContent = content;
+        }
+    }
+    
+    function syntaxHighlight(json) {
+        if (typeof json !== 'string') {
+             json = JSON.stringify(json, undefined, 2);
+        }
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = 'json-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+        });
+    }
+
+    function toggleWordWrap(id) {
+        const checkbox = document.getElementById(`word-wrap-${id}`);
+        const codeBlock = document.getElementById(`code-block-${id}`);
+        if (!codeBlock) return;
+        
+        if (checkbox.checked) {
+            codeBlock.style.whiteSpace = 'pre-wrap';
+            codeBlock.style.overflowX = 'hidden';
+        } else {
+            codeBlock.style.whiteSpace = 'pre';
+            codeBlock.style.overflowX = 'auto';
+        }
+    }
+  </script>
+</body>
 </html>

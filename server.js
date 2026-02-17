@@ -100,6 +100,8 @@ app.get("/api/config/:endpointId", async (req, res) => {
         headers: { "Content-Type": "text/plain" },
         body: "Livehook Received",
         delay: 0,
+        forwardingEnabled: false,
+        forwardingUrl: "",
       };
     }
     res.json(config);
